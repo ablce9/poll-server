@@ -16,6 +16,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #include "./epoll.h"
 
@@ -37,6 +38,17 @@ static void read_cb(int fd) {
     if (num_read < 0)
 	printf("Failed to read.\n");
     printf("read: %d\n", num_read);
+}
+
+static int set_fd_nonblcok(int fd) {
+    int flags;
+
+    flags = fcntl(fd, F_GETFL);
+    flags = fcntl(fd, F_SETFL, flags|O_NONBLOCK);
+    if (flags == -1)
+	printf("fcntl, F_SETFL\n");
+
+    return 0;
 }
 
 int main(void) {
@@ -63,14 +75,16 @@ int main(void) {
     }
 #undef PORT
 
-    int fd, new_fd, optval = 1;
+    int fd, optval = 1;
     /* Loop through all the results and bind to the first. */
     for (p = serverinfo; p != NULL; p = (*p).ai_next) {
-	if ((fd = socket((*p).ai_family, (*p).ai_socktype, (*p).ai_protocol)) == -1) {
+	fd = socket((*p).ai_family, (*p).ai_socktype|SOCK_NONBLOCK|SOCK_CLOEXEC, (*p).ai_protocol);
+	if (fd == -1) {
 	    printf("socket\n");
 	    continue;
 	}
 
+	set_fd_nonblcok(fd);
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1) {
 	    printf("setsockopt\n");
 	    exit(1);
@@ -104,20 +118,23 @@ int main(void) {
     struct poll_data *data = new_poll();
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
+    int peer_fd, err;
     for(;;) {
 	sin_size = sizeof(their_addr);
-	new_fd = accept4(fd, (struct sockaddr *)&their_addr, &sin_size, SOCK_NONBLOCK);
-	if (new_fd == -1) {
-	    printf("accpet\n");
+	err = accept4(fd, (struct sockaddr *)&their_addr, &sin_size, SOCK_NONBLOCK|SOCK_CLOEXEC);
+	if (err < 0 && err == EAGAIN)
 	    continue;
+
+	if (err > 0) {
+	    peer_fd = err;
+	    register_client(data, peer_fd);
+	    dispatch(data, read_cb);
+	    const char *msg = "1234567\n";
+	    if (send(peer_fd, msg, sizeof(msg), 0) == -1)
+		printf("send\n");
+
+	    close(peer_fd);
 	}
-	register_client(data, new_fd);
-	dispatch(data, read_cb);
-	printf("Got new client\n");
-	const char *msg = "12345678";
-	if (send(new_fd, msg, sizeof(msg), 0) == -1)
-	    printf("send\n");
-	close(new_fd);
 	// Kick out registered event here.
     }
     free(data);
