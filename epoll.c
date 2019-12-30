@@ -15,7 +15,7 @@ struct poll_data {
 };
 
 static void die(int code, const char *message) {
-    printf("%s", message);
+    printf("errno: %s, %s", strerror(errno), message);
     exit(code);
 }
 
@@ -36,7 +36,7 @@ void register_client(struct poll_data *data, int fd) {
     struct epoll_event event = { data: { fd: fd }, events: EPOLLIN };
     int code;
     if ((code = epoll_ctl(data->fd, EPOLL_CTL_ADD, fd, &event)) == -1)
-	die(code, "epoll_ctl");
+	die(code, "epoll_ctl\n");
 }
 
 int dispatch(struct poll_data *data, read_callback read_cb) {
