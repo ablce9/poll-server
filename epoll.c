@@ -7,13 +7,6 @@
 
 #include "./epoll.h"
 
-#define MAX_EVENTS 1024
-struct poll_data {
-    int fd;
-    struct epoll_event event_list[MAX_EVENTS];
-    //read_callback read_callback;
-};
-
 static void die(int code, const char *message) {
     printf("errno: %s, %s", strerror(errno), message);
     exit(code);
@@ -68,5 +61,3 @@ int dispatch(struct poll_data *data, read_callback read_cb) {
 #undef DEBUG_EVENT
     return num_event;
 }
-
-#undef MAX_EVENTS

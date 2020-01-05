@@ -116,24 +116,26 @@ int main(void) {
     printf("Server is up and running...\n");
 
     struct poll_data *data = new_poll();
+    register_client(data, fd);
     struct sockaddr_storage their_addr;
     socklen_t sin_size;
-    int peer_fd, err;
+    int peer_fd, num_evt;
     for(;;) {
-	sin_size = sizeof(their_addr);
-	err = accept4(fd, (struct sockaddr *)&their_addr, &sin_size, SOCK_NONBLOCK|SOCK_CLOEXEC);
-	if (err < 0 && err == EAGAIN)
-	    continue;
-
-	if (err > 0) {
-	    peer_fd = err;
-	    register_client(data, peer_fd);
-	    dispatch(data, read_cb);
-	    const char *msg = "1234567\n";
-	    if (send(peer_fd, msg, sizeof(msg), 0) == -1)
+	num_evt = epoll_wait(data->fd, data->event_list, MAX_EVENTS, -1);
+	if (num_evt) {
+	    sin_size = sizeof(their_addr);
+	    peer_fd = accept4(fd, (struct sockaddr *)&their_addr, &sin_size, SOCK_NONBLOCK|SOCK_CLOEXEC);
+	    if (peer_fd == EAGAIN)
+		continue;
+	    else {
+	     register_client(data, peer_fd);
+	     dispatch(data, read_cb);
+	     const char *msg = "1234567\n";
+	     if (send(peer_fd, msg, sizeof(msg), 0) == -1)
 		printf("send\n");
 
-	    close(peer_fd);
+	     close(peer_fd);
+	    }
 	}
 	// Kick out registered event here.
     }
